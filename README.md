@@ -35,4 +35,4 @@ Exports are capped at about 16 megapixels, which is the canvas limit in iOS Safa
 
 ## Updating
 
-After changing any file, bump `VERSION` in `sw.js` (for example to `lumentap-v2`) and push. The installed app picks up the new version the next time it's opened online, sometimes on the second launch.
+After changing any file, bump `VERSION` in `sw.js` (for example to `lumentap-v2`) and push. The installed app picks up the new version the next time it is opened online.

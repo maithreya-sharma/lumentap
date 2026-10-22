@@ -1,6 +1,8 @@
-// Offline support: cache the app shell, serve it cache-first, refresh in the background.
-// Bump VERSION whenever you change any file so phones pick up the update.
-const VERSION = 'lumentap-v2';
+// Offline support.
+// The page itself is network-first: when online you always get the latest version,
+// and the saved copy is only used when offline. Icons and the manifest are cache-first.
+// Bump VERSION whenever you change any file.
+const VERSION = 'lumentap-v3';
 const FILES = [
   './',
   './index.html',
@@ -11,7 +13,11 @@ const FILES = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(VERSION)
+      .then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -23,14 +29,26 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+
+  const isPage = req.mode === 'navigate' || req.destination === 'document';
+  if (isPage) {
+    e.respondWith(
+      fetch(req, { cache: 'no-store' })
+        .then(res => {
+          if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put('./index.html', copy)); }
+          return res;
+        })
+        .catch(() => caches.match('./index.html').then(hit => hit || caches.match('./')))
+    );
+    return;
+  }
+
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then(hit => {
-      const net = fetch(e.request).then(res => {
-        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
-        return res;
-      }).catch(() => hit);
-      return hit || net;
-    })
+    caches.match(req, { ignoreSearch: true }).then(hit => hit || fetch(req).then(res => {
+      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
+      return res;
+    }))
   );
 });

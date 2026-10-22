@@ -393,7 +393,12 @@ $('file').addEventListener('change',e=>{
   loadFrom(c,'sample');
 })();
 
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>{
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
+    // check for a new version whenever the app comes back to the foreground
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});});
+  }).catch(()=>{});
+});
 })();
 </script>
 </body>
