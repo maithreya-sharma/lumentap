@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LumenTap</title>
+<meta name="description" content="Tap any spot on a photo to re-expose the whole image around it.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="LumenTap">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f3f2ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+/* Layout: one-column photo tool — header, full-width stage, control strip beneath. Camera AE-lock yellow is the single accent. */
+:root{
+  --bg:#f3f2ef; --surface:#ffffff; --fg:#1d1c1a; --muted:#6b6862; --line:#dedbd4;
+  --accent:#f2b705; --accent-ink:#1d1c1a; --stage:#e6e4df;
+  --f-body:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  --f-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#141413; --surface:#1d1c1a; --fg:#eeece7; --muted:#a29e96; --line:#33312d;
+  --accent:#ffc61a; --accent-ink:#141413; --stage:#0c0c0b; color-scheme:dark } }
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:calc(env(safe-area-inset-top,0px) + 16px);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);
+  -webkit-tap-highlight-color:transparent}
+img{max-width:100%}
+[hidden]{display:none!important}
+.wrap{max-width:860px;margin:0 auto;display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+h1{font-size:1.6rem;font-weight:700;letter-spacing:-.01em;margin:0}
+header p{margin:2px 0 0;color:var(--muted);max-width:52ch}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+button,.filebtn,.linkbtn{font:600 15px var(--f-body);border-radius:10px;padding:10px 14px;border:1px solid var(--line);
+  background:var(--surface);color:var(--fg);cursor:pointer;user-select:none;-webkit-user-select:none;text-decoration:none;display:inline-block}
+.primary{background:var(--accent)!important;color:var(--accent-ink)!important;border-color:var(--accent)!important}
+button:disabled{opacity:.5}
+button:focus-visible,.filebtn:focus-within,input:focus-visible,.linkbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#file{position:absolute;opacity:0;width:1px;height:1px}
+
+.stage{position:relative;background:var(--stage);border-radius:14px;overflow:hidden;display:grid;place-items:center;touch-action:manipulation}
+canvas#view{display:block;max-width:100%;max-height:62vh;width:auto;height:auto;cursor:crosshair}
+.marker{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;border:1.5px solid var(--accent);pointer-events:none;
+  box-shadow:0 0 0 1px rgba(0,0,0,.25);transition:transform .25s ease}
+.marker::before,.marker::after{content:"";position:absolute;background:var(--accent);left:50%;width:1.5px;height:6px}
+.marker::before{top:-6px}.marker::after{bottom:-6px}
+.marker.pop{transform:scale(1.35)}
+.tag{position:absolute;top:10px;left:10px;font:500 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;
+  background:rgba(0,0,0,.55);color:#fff;padding:4px 8px;border-radius:6px;max-width:calc(100% - 20px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:13px;background:rgba(0,0,0,.55);color:#fff;
+  padding:5px 10px;border-radius:999px;white-space:nowrap}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:grid;gap:14px}
+.readouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.ro span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.ro b{font:500 1.3rem var(--f-mono);font-variant-numeric:tabular-nums}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.row label{font-weight:600}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--accent)}
+.val{font:500 13px var(--f-mono);color:var(--muted);min-width:4ch}
+.check{display:flex;align-items:center;gap:8px;font-weight:500}
+.check input{accent-color:var(--accent);width:18px;height:18px}
+.status{margin:0;font-size:13.5px;color:var(--muted)}
+.saved{display:grid;gap:8px}
+.saved img{border-radius:10px;border:1px solid var(--line)}
+.saved p,.note{margin:0;color:var(--muted);font-size:13.5px;max-width:65ch}
+@media (max-width:480px){.readouts{grid-template-columns:1fr 1fr}.readouts .ro:last-child{grid-column:1/-1}}
+@media (prefers-reduced-motion:reduce){.marker{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>LumenTap</h1>
+      <p>Tap any spot on the photo. The whole image re-exposes so that spot lands at your target brightness.</p>
+    </div>
+    <div class="btns">
+      <label class="filebtn primary" for="file">Open photo<input id="file" type="file" accept="image/*"></label>
+      <button id="reset" type="button">Reset</button>
+    </div>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="view"></canvas>
+    <div class="marker" id="marker" hidden></div>
+    <div class="tag" id="tag">Sample scene</div>
+    <div class="hint" id="hint">Tap the bright window to meter on it</div>
+  </div>
+
+  <div class="panel">
+    <div class="readouts">
+      <div class="ro"><span>Exposure</span><b id="ev">±0.00 EV</b></div>
+      <div class="ro"><span>Spot brightness</span><b id="spot">—</b></div>
+      <div class="ro"><span>Spot after</span><b id="after">—</b></div>
+    </div>
+    <div class="row">
+      <label for="target">Spot target</label>
+      <input id="target" type="range" min="15" max="85" value="50">
+      <span class="val" id="targetVal">50%</span>
+    </div>
+    <div class="row">
+      <label class="check"><input id="shoulder" type="checkbox" checked> Soften highlights when brightening</label>
+    </div>
+    <div class="row">
+      <button id="compare" type="button">Hold to compare</button>
+      <button id="save" type="button" class="primary">Save full size</button>
+      <button id="share" type="button" class="primary" hidden>Save to Photos</button>
+    </div>
+    <p class="status" id="status" hidden></p>
+    <div class="saved" id="savedBox" hidden>
+      <img id="savedImg" alt="Adjusted photo">
+      <p>Long-press the image and choose Save to Photos, or use the download link.</p>
+      <a class="linkbtn" id="dl" download="lumentap.jpg" href="#">Download JPEG</a>
+    </div>
+    <p class="note">Pure white areas (like a blown-out window) have no detail left in a JPEG, so metering on them turns them grey and darkens everything else. For a face in front of a bright window, tap the face instead.</p>
+  </div>
+</div>
+
+<script>
+(()=>{
+const PREVIEW_MAX=2048;          // live preview long edge
+const EXPORT_MAX_PIXELS=16e6;    // iOS Safari canvas area limit is ~16.7 MP
+const cv=document.getElementById('view'), ctx=cv.getContext('2d',{willReadFrequently:true});
+const $=id=>document.getElementById(id);
+const marker=$('marker'),hint=$('hint'),tag=$('tag'),evEl=$('ev'),spotEl=$('spot'),afterEl=$('after');
+const target=$('target'),targetVal=$('targetVal'),shoulderEl=$('shoulder');
+const saveBtn=$('save'),shareBtn=$('share'),statusEl=$('status'),savedBox=$('savedBox');
+let source=null,baseName='photo',W=0,H=0,lin=null,orig=null,outData=null,gain=1,tap=null,spotLin=null,preparedFile=null,savedUrl=null;
+
+// sRGB <-> linear lookup tables
+const dec=new Float32Array(256);
+for(let i=0;i<256;i++){const c=i/255;dec[i]=c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);}
+const N=4096,enc=new Uint8ClampedArray(N+1);
+for(let i=0;i<=N;i++){const l=i/N;const c=l<=0.0031308?l*12.92:1.055*Math.pow(l,1/2.4)-0.055;enc[i]=Math.round(c*255);}
+const toS=l=>l<=0.0031308?l*12.92:1.055*Math.pow(l,1/2.4)-0.055;
+const toL=c=>c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);
+const KNEE=0.75,SPAN=1-KNEE;
+const shape=(v,soft)=>soft&&v>KNEE?KNEE+SPAN*(1-Math.exp(-(v-KNEE)/SPAN)):v;
+
+// One pass over RGBA bytes: decode, apply gain, highlight shoulder, encode. Used for preview and export.
+function processBytes(src,dst,g,soft){
+  for(let i=0;i<src.length;i+=4){
+    for(let c=0;c<3;c++){const v=shape(dec[src[i+c]]*g,soft);dst[i+c]=enc[v>=1?N:(v*N)|0];}
+    dst[i+3]=255;
+  }
+}
+
+function invalidateSave(){preparedFile=null;shareBtn.hidden=true;saveBtn.hidden=false;savedBox.hidden=true;statusEl.hidden=true;}
+
+function loadFrom(src,name){
+  source=src;baseName=name||'photo';
+  const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
+  const s=Math.min(1,PREVIEW_MAX/Math.max(sw,sh));W=Math.round(sw*s);H=Math.round(sh*s);
+  cv.width=W;cv.height=H;ctx.drawImage(src,0,0,W,H);
+  orig=ctx.getImageData(0,0,W,H);outData=ctx.createImageData(W,H);
+  const d=orig.data;lin=new Float32Array(W*H*3);
+  for(let i=0,j=0;i<d.length;i+=4,j+=3){lin[j]=dec[d[i]];lin[j+1]=dec[d[i+1]];lin[j+2]=dec[d[i+2]];}
+  gain=1;tap=null;spotLin=null;marker.hidden=true;hint.hidden=false;invalidateSave();
+  render();updateReadouts();
+}
+
+function render(){
+  const o=outData.data,g=gain,soft=shoulderEl.checked&&g>1;
+  for(let j=0,i=0;j<lin.length;j+=3,i+=4){
+    for(let c=0;c<3;c++){const v=shape(lin[j+c]*g,soft);o[i+c]=enc[v>=1?N:(v*N)|0];}
+    o[i+3]=255;
+  }
+  ctx.putImageData(outData,0,0);
+}
+
+function sample(x,y){
+  const r=Math.max(4,Math.round(Math.min(W,H)*0.03));let sum=0,n=0;
+  for(let yy=Math.max(0,y-r);yy<=Math.min(H-1,y+r);yy++)for(let xx=Math.max(0,x-r);xx<=Math.min(W-1,x+r);xx++){
+    if((xx-x)**2+(yy-y)**2>r*r)continue;const j=(yy*W+xx)*3;
+    sum+=0.2126*lin[j]+0.7152*lin[j+1]+0.0722*lin[j+2];n++;}
+  return Math.max(sum/n,1e-4);
+}
+
+function applyGain(){
+  if(spotLin==null)return;
+  gain=Math.min(16,Math.max(1/16,toL(target.value/100)/spotLin));
+  invalidateSave();render();updateReadouts();
+}
+
+function updateReadouts(){
+  const ev=Math.log2(gain);
+  evEl.textContent=(ev>0.005?'+':ev<-0.005?'−':'±')+Math.abs(ev).toFixed(2)+' EV';
+  if(spotLin==null){spotEl.textContent='—';afterEl.textContent='—';return;}
+  spotEl.textContent=Math.round(toS(Math.min(1,spotLin))*100)+'%';
+  afterEl.textContent=Math.round(toS(Math.min(1,shape(spotLin*gain,shoulderEl.checked&&gain>1)))*100)+'%';
+}
+
+function placeMarker(){
+  if(!tap)return;const r=cv.getBoundingClientRect(),sr=$('stage').getBoundingClientRect();
+  marker.style.left=(r.left-sr.left+tap.x/W*r.width)+'px';marker.style.top=(r.top-sr.top+tap.y/H*r.height)+'px';
+}
+
+cv.addEventListener('click',e=>{
+  if(!lin)return;const r=cv.getBoundingClientRect();
+  const x=Math.round((e.clientX-r.left)/r.width*W),y=Math.round((e.clientY-r.top)/r.height*H);
+  tap={x,y};spotLin=sample(x,y);applyGain();
+  marker.hidden=false;hint.hidden=true;placeMarker();
+  marker.classList.add('pop');setTimeout(()=>marker.classList.remove('pop'),180);
+});
+window.addEventListener('resize',placeMarker);
+target.addEventListener('input',()=>{targetVal.textContent=target.value+'%';applyGain();});
+shoulderEl.addEventListener('change',()=>{if(lin){invalidateSave();render();updateReadouts();}});
+$('reset').addEventListener('click',()=>{if(!lin)return;gain=1;tap=null;spotLin=null;marker.hidden=true;hint.hidden=false;invalidateSave();render();updateReadouts();});
+
+const cmp=$('compare');
+const showOrig=e=>{if(e)e.preventDefault();if(orig)ctx.putImageData(orig,0,0);cmp.textContent='Showing original';};
+const showNew=()=>{if(outData)ctx.putImageData(outData,0,0);cmp.textContent='Hold to compare';};
+cmp.addEventListener('pointerdown',showOrig);['pointerup','pointerleave','pointercancel'].forEach(t=>cmp.addEventListener(t,showNew));
+cmp.addEventListener('contextmenu',e=>e.preventDefault());
+
+// Full-resolution export. Rendering takes a moment, and iOS only allows the share sheet
+// straight from a tap, so this prepares the file first and then offers "Save to Photos".
+const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));
+saveBtn.addEventListener('click',async()=>{
+  if(!source)return;
+  saveBtn.disabled=true;statusEl.hidden=false;statusEl.textContent='Preparing full-size photo…';
+  await nextFrame();
+  try{
+    const sw=source.naturalWidth||source.width,sh=source.naturalHeight||source.height;
+    const s=Math.min(1,Math.sqrt(EXPORT_MAX_PIXELS/(sw*sh)));
+    const ew=Math.round(sw*s),eh=Math.round(sh*s);
+    const ec=document.createElement('canvas');ec.width=ew;ec.height=eh;
+    const ex=ec.getContext('2d');ex.drawImage(source,0,0,ew,eh);
+    const soft=shoulderEl.checked&&gain>1,BAND=256;
+    for(let y=0;y<eh;y+=BAND){            // process in bands to keep memory low
+      const h=Math.min(BAND,eh-y),d=ex.getImageData(0,y,ew,h);
+      processBytes(d.data,d.data,gain,soft);ex.putImageData(d,0,y);
+    }
+    const blob=await new Promise((res,rej)=>ec.toBlob(b=>b?res(b):rej(new Error('encode')),'image/jpeg',0.93));
+    ec.width=ec.height=0;
+    const ev=Math.log2(gain),fname=baseName.replace(/\.[^.]+$/,'')+'-lumentap.jpg';
+    preparedFile=new File([blob],fname,{type:'image/jpeg'});
+    const mp=(ew*eh/1e6).toFixed(1);
+    const canShare=navigator.canShare&&navigator.canShare({files:[preparedFile]});
+    if(canShare){
+      saveBtn.hidden=true;shareBtn.hidden=false;
+      statusEl.textContent=`Ready: ${ew}×${eh} (${mp} MP), ${ev>=0?'+':'−'}${Math.abs(ev).toFixed(2)} EV. Tap Save to Photos, then choose Save Image.`;
+    }else{
+      showFallback(blob,fname);statusEl.textContent=`Ready: ${ew}×${eh} (${mp} MP).`;
+    }
+  }catch(err){
+    statusEl.textContent='Could not prepare the photo. It may be too large for this device; try a smaller one.';
+  }finally{saveBtn.disabled=false;}
+});
+
+shareBtn.addEventListener('click',async()=>{
+  if(!preparedFile)return;
+  try{await navigator.share({files:[preparedFile]});statusEl.textContent='Saved. Tap a new spot to make another version.';}
+  catch(err){
+    if(err&&err.name==='AbortError'){statusEl.textContent='Share cancelled. Tap Save to Photos to try again.';return;}
+    showFallback(preparedFile,preparedFile.name);statusEl.textContent='The share sheet is unavailable here. Use the image below instead.';
+  }
+});
+
+function showFallback(blob,fname){
+  if(savedUrl)URL.revokeObjectURL(savedUrl);savedUrl=URL.createObjectURL(blob);
+  $('savedImg').src=savedUrl;$('dl').href=savedUrl;$('dl').download=fname;savedBox.hidden=false;
+}
+
+$('file').addEventListener('change',e=>{
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  const url=URL.createObjectURL(f),img=new Image();
+  img.onload=()=>{loadFrom(img,f.name);tag.textContent=f.name;hint.textContent='Tap a spot to meter on it';};
+  img.onerror=()=>{URL.revokeObjectURL(url);hint.hidden=false;hint.textContent='That file could not be opened. Try a JPEG, HEIC or PNG.';};
+  img.src=url;e.target.value='';
+});
+
+// Sample scene shown on first launch: backlit room with a clipped window, curtain and a lamp
+(function sampleScene(){
+  const c=document.createElement('canvas');c.width=1200;c.height=900;const x=c.getContext('2d');
+  let g=x.createLinearGradient(0,0,1200,0);g.addColorStop(0,'#c9a98c');g.addColorStop(1,'#5a4536');x.fillStyle=g;x.fillRect(0,0,1200,900);
+  g=x.createRadialGradient(220,330,40,220,330,420);g.addColorStop(0,'#ffffff');g.addColorStop(.55,'#fffdf8');g.addColorStop(1,'rgba(255,240,220,0)');
+  x.fillStyle='#fff';x.fillRect(70,90,300,500);x.fillStyle=g;x.fillRect(0,0,700,900);
+  x.fillStyle='#e9e3da';x.fillRect(214,90,12,500);x.fillRect(70,330,300,10);
+  for(let i=0;i<9;i++){const cx=400+i*48;g=x.createLinearGradient(cx,0,cx+48,0);
+    g.addColorStop(0,'#6e3f2c');g.addColorStop(.5,'#a3664a');g.addColorStop(1,'#5a3123');x.fillStyle=g;x.fillRect(cx,40,48,620);}
+  g=x.createLinearGradient(0,640,0,900);g.addColorStop(0,'#4a3a2e');g.addColorStop(1,'#231a14');x.fillStyle=g;x.fillRect(0,640,1200,260);
+  x.fillStyle='#e7d7b8';x.beginPath();x.moveTo(930,330);x.lineTo(1050,330);x.lineTo(1020,230);x.lineTo(960,230);x.closePath();x.fill();
+  x.fillStyle='#2b2520';x.fillRect(986,330,8,250);x.fillRect(940,580,100,14);
+  g=x.createRadialGradient(840,600,10,840,620,90);g.addColorStop(0,'#5b8fa8');g.addColorStop(1,'#1f3a48');x.fillStyle=g;
+  x.beginPath();x.ellipse(840,620,62,80,0,0,Math.PI*2);x.fill();
+  g=x.createLinearGradient(0,0,1200,0);g.addColorStop(0,'rgba(255,255,255,.18)');g.addColorStop(.6,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,1200,900);
+  loadFrom(c,'sample');
+})();
+
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
+})();
+</script>
+</body>
+</html>
