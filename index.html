@@ -87,9 +87,11 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
 .marker .box{position:absolute;inset:0;border:1.5px solid var(--accent);border-radius:2px;box-shadow:0 0 0 .5px rgba(0,0,0,.35)}
 .marker .box::before,.marker .box::after{content:"";position:absolute;background:var(--accent);left:50%;width:1.5px;height:7px;margin-left:-.75px}
 .marker .box::before{top:-1px}.marker .box::after{bottom:-1px}
-.marker .sun{position:absolute;left:calc(100% + 7px);top:50%;width:22px;height:22px;margin-top:-11px;color:var(--accent);transition:transform .2s}
+.marker .sun{position:absolute;left:calc(100% + 7px);top:27px;width:22px;height:22px;color:var(--accent);transition:transform .2s var(--spring)}
+.marker .sun.active{transform:scale(1.3)}
 .marker .rail{position:absolute;left:calc(100% + 17.25px);width:1.5px;background:var(--accent);opacity:.85}
-.marker .rail.a{top:0;height:calc(50% - 15px)}.marker .rail.b{bottom:0;height:calc(50% - 15px)}
+html.ios .sw{appearance:auto;-webkit-appearance:auto;width:auto;height:auto;background:none;accent-color:#34c759}
+html.ios .sw::after{content:none}
 .marker.enter{transform:scale(1.5);opacity:0}
 .marker.dim{opacity:.45}
 .badge{position:absolute;top:12px;left:50%;transform:translate(-50%,-6px);padding:5px 10px;border-radius:6px;background:var(--accent);color:var(--accent-ink);
@@ -198,7 +200,7 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
       <div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/></svg></div>
         <div><b>Tap to meter</b><span>Pick a face, the sky or a shadow. Exposure follows.</span></div></div>
       <div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"/><path d="M6 9v6M9 10v4M12 7v10M15 10v4M18 9v6"/></svg></div>
-        <div><b>Fine-tune with the dial</b><span>Slide for brighter or darker. Hold the photo to see the original.</span></div></div>
+        <div><b>Fine-tune by feel</b><span>Drag the sun up or down, or slide the dial. Hold the photo to see the original.</span></div></div>
       <div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="m3.5 15 4.5-4.5 4 4 3-3 5.5 5.5"/><circle cx="16" cy="9" r="1.4" fill="currentColor"/></svg></div>
         <div><b>Saves in full resolution</b><span>Straight to Photos. Nothing leaves your phone.</span></div></div>
     </div>
@@ -280,7 +282,8 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
     <label class="row" for="optSound"><span class="rl"><i style="background:#ff375f"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></i>Sounds</span><input class="sw" id="optSound" type="checkbox" switch checked></label>
     <label class="row" for="optHaptic"><span class="rl"><i style="background:#5e5ce6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="8" y="3.5" width="8" height="17" rx="2"/><path d="M4.5 9v6M19.5 9v6M2 10.5v3M22 10.5v3"/></svg></i>Haptics</span><input class="sw" id="optHaptic" type="checkbox" switch checked></label>
   </div>
-  <p class="hint">Sounds follow your ringer switch. Haptics need iOS 18 or later.</p>
+  <button class="big plain press" id="testHaptic" type="button">Test Haptics</button>
+  <p class="hint">Sounds follow your ringer switch. Haptics need iOS 18 or later and System Haptics turned on in the iPhone’s Settings → Sounds &amp; Haptics.</p>
   <button class="big plain press" data-close type="button">Done</button>
 </div>
 
@@ -297,6 +300,7 @@ const savePrefs=()=>{try{localStorage.setItem('lumentap-prefs',JSON.stringify(pr
 $('optSound').checked=prefs.sound;$('optHaptic').checked=prefs.haptics;
 $('optSound').addEventListener('change',e=>{prefs.sound=e.target.checked;savePrefs();if(prefs.sound)play('toggle');});
 $('optHaptic').addEventListener('change',e=>{prefs.haptics=e.target.checked;savePrefs();});
+document.getElementById('testHaptic').addEventListener('click',()=>{const was=prefs.haptics;prefs.haptics=true;haptic('success');prefs.haptics=was;play('success');});
 
 /* ================= sound ================= */
 let actx=null,noiseBuf=null;
@@ -345,15 +349,22 @@ function play(n){
 
 /* ================= haptics ================= */
 // iOS Safari has no vibration API; toggling a native switch control (iOS 18+) gives a system haptic tick.
-function iosTick(){
-  try{const l=document.createElement('label');l.setAttribute('aria-hidden','true');l.style.display='none';
-    const i=document.createElement('input');i.type='checkbox';i.setAttribute('switch','');l.appendChild(i);
-    document.head.appendChild(l);l.click();l.remove();}catch(e){}
+// The switch and label stay in the page (rendered, but invisible): iOS ignores clicks on elements that aren't rendered.
+const IS_IOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+if(IS_IOS)document.documentElement.classList.add('ios');
+let hapLabel=null;
+function ensureHap(){
+  if(hapLabel)return;
+  const css='position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:.01;pointer-events:none;overflow:hidden;z-index:-1;';
+  const i=document.createElement('input');i.type='checkbox';i.id='hapSw';i.setAttribute('switch','');i.tabIndex=-1;i.setAttribute('aria-hidden','true');i.style.cssText=css;
+  hapLabel=document.createElement('label');hapLabel.htmlFor='hapSw';hapLabel.setAttribute('aria-hidden','true');hapLabel.style.cssText=css;
+  document.body.append(i,hapLabel);
 }
+function iosTick(){try{ensureHap();hapLabel.click();}catch(e){}}
 let lastHap=0;
 function haptic(kind='light'){
   if(!prefs.haptics)return;const now=performance.now();if(kind==='light'&&now-lastHap<45)return;lastHap=now;
-  if(navigator.vibrate&&!/iPhone|iPad|iPod/.test(navigator.userAgent)){navigator.vibrate(kind==='success'?[14,70,14]:kind==='medium'?18:8);return;}
+  if(navigator.vibrate&&!IS_IOS){navigator.vibrate(kind==='success'?[14,70,14]:kind==='medium'?18:8);return;}
   iosTick();if(kind==='success'||kind==='double')setTimeout(iosTick,110);
 }
 const fb=(sound,hap)=>{if(sound)play(sound);if(hap)haptic(hap);};
@@ -475,7 +486,7 @@ function showEditor(){
   editor.classList.remove('off');editor.removeAttribute('aria-hidden');
   cv.classList.remove('in');requestAnimationFrame(()=>{fit();layoutRuler();moveRuler();draw();requestAnimationFrame(()=>cv.classList.add('in'));});
   fb('open','light');
-  setTimeout(()=>say('Tap to set exposure · Hold to compare',{ms:2600}),450);
+  setTimeout(()=>say('Tap to meter · Drag up or down to adjust',{ms:2800}),450);
 }
 function showHome(){
   editor.classList.add('off');editor.setAttribute('aria-hidden','true');
@@ -520,11 +531,22 @@ function placeMarker(){
 const showOrig=()=>{showingOrig=true;draw();badge.classList.add('show');marker.classList.add('dim');fb('toggle','light');};
 const showNew=()=>{showingOrig=false;draw();badge.classList.remove('show');marker.classList.remove('dim');};
 
+const sunEl=marker.querySelector('.sun'),railA=marker.querySelector('.rail.a'),railB=marker.querySelector('.rail.b');
+const SUN_PX=2.4,SUN_RANGE=52,RAIL_TOP=-34,RAIL_BOT=110;
+function startSun(y){clearTimeout(holdT);cancelAnimationFrame(rAnim);gest={type:'sun',y0:y,t0:target};sunEl.classList.add('active');}
+function updateSun(){
+  const c=38-(target-50)/35*SUN_RANGE;            // brighter = sun moves up
+  sunEl.style.top=(c-11)+'px';
+  railA.style.top=RAIL_TOP+'px';railA.style.height=Math.max(0,c-15-RAIL_TOP)+'px';
+  railB.style.top=(c+15)+'px';railB.style.height=Math.max(0,RAIL_BOT-c-15)+'px';
+}
 const pts=new Map();let gest=null,holdT=null;
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
 stage.addEventListener('pointerdown',e=>{
   if(!W)return;stage.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});cancelAnimationFrame(zoomAnim);
   if(pts.size===1){
+    if(!marker.hidden){const sb=sunEl.getBoundingClientRect();
+      if(Math.hypot(e.clientX-(sb.left+sb.width/2),e.clientY-(sb.top+sb.height/2))<38){startSun(e.clientY);return;}}
     gest={type:'pending',x0:e.clientX,y0:e.clientY,tx0:tx,ty0:ty};clearTimeout(holdT);
     holdT=setTimeout(()=>{if(gest&&gest.type==='pending'){gest.type='hold';showOrig();}},330);
   }else if(pts.size===2){
@@ -540,9 +562,13 @@ stage.addEventListener('pointermove',e=>{
     const[a,b]=[...pts.values()],m=mid(a,b);let z=gest.z0*dist(a,b)/gest.d0;
     if(z<1)z=1-(1-z)*0.35;if(z>6)z=6+(z-6)*0.25;   // rubber-band past the limits
     zoom=z;tx=m.x-gest.bxs-z*gest.qx;ty=m.y-gest.bys-z*gest.qy;applyT();showChip();
+  }else if(gest.type==='sun'){
+    setTarget(gest.t0-(e.clientY-gest.y0)/SUN_PX);
   }else if(gest.type==='pending'||gest.type==='pan'){
     const dx=e.clientX-gest.x0,dy=e.clientY-gest.y0;
-    if(gest.type==='pending'&&Math.hypot(dx,dy)>10){clearTimeout(holdT);gest.type=zoom>1.01?'pan':'none';}
+    if(gest.type==='pending'&&Math.hypot(dx,dy)>10){clearTimeout(holdT);
+      if(zoom<=1.01&&Math.abs(dy)>Math.abs(dx)){startSun(e.clientY);return;}   // drag up/down = brighter/darker, like Camera
+      gest.type=zoom>1.01?'pan':'none';}
     if(gest.type==='pan'){tx=gest.tx0+dx;ty=gest.ty0+dy;const{bx,by}=bounds();
       const rb=(v,lo,hi)=>v<lo?lo-(lo-v)*0.3:v>hi?hi+(v-hi)*0.3:v;tx=rb(tx,bx[0],bx[1]);ty=rb(ty,by[0],by[1]);applyT();}
   }
@@ -557,7 +583,8 @@ function endPointer(e){
   }
   if(pts.size)return;
   clearTimeout(holdT);
-  if(gest.type==='hold')showNew();
+  if(gest.type==='sun'){sunEl.classList.remove('active');snapTarget();haptic('light');}
+  else if(gest.type==='hold')showNew();
   else if(gest.type==='pending'&&e.type==='pointerup')meterAt(e.clientX,e.clientY);
   else if(gest.type==='pan')settleZoom();
   gest=null;
@@ -602,7 +629,7 @@ function setModeUI(){const on=mode==='auto';$('auto').classList.toggle('on',on);
 /* ================= ruler with momentum ================= */
 const ruler=$('ruler'),ticks=$('ticks'),lbl=$('lbl');let half=0,rAnim=0,lblT=null;
 function layoutRuler(){half=ruler.clientWidth/2;ticks.style.width=((TMAX-TMIN)*U+2)+'px';$('zero').style.left=((50-TMIN)*U+1)+'px';}
-function moveRuler(){ticks.style.transform=`translate3d(${half-(target-TMIN)*U-1}px,0,0)`;ruler.setAttribute('aria-valuenow',Math.round(target));}
+function moveRuler(){ticks.style.transform=`translate3d(${half-(target-TMIN)*U-1}px,0,0)`;ruler.setAttribute('aria-valuenow',Math.round(target));updateSun();}
 new ResizeObserver(()=>{layoutRuler();moveRuler();}).observe(ruler);
 let lastInt=50;
 function setTarget(v,apply=true){
@@ -630,7 +657,7 @@ ruler.addEventListener('pointermove',e=>{
   setTarget(drag.v-(e.clientX-drag.x)/U);
 });
 function rulerRelease(){
-  if(!drag)return;let vel=drag.vel;drag=null;
+  if(!drag)return;let vel=drag.vel;drag=null;haptic('light');
   if(Math.abs(vel)<0.004||reduced){snapTarget();return;}
   let last=performance.now();
   const step=now=>{const dt=now-last;last=now;vel*=Math.pow(0.94,dt/16.7);const nv=target+vel*dt;
