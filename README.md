@@ -26,10 +26,12 @@ icons/                 home screen icons
 
 ## Using it
 
-- **Open photo** picks from your library.
-- Tap a spot to meter on it. The **Spot target** slider sets how bright that spot should end up.
-- **Hold to compare** shows the original.
-- **Save full size** prepares the full-resolution photo, then **Save to Photos** opens the share sheet. Choose **Save Image**.
+- **Choose Photo** or **Take Photo** on the welcome screen opens the editor.
+- **Tap** a spot to meter on it. **Press and hold** the photo to see the original. **Pinch** to zoom.
+- Slide the **dial** to fine-tune brightness. Before you tap a spot, it works as a plain exposure control.
+- **Auto** balances the whole photo, **Highlights** protects bright areas when brightening, **Reset** goes back to the original.
+- **Save** renders the full-resolution photo, then **Save to Photos** opens the share sheet. Choose **Save Image**.
+- The settings button on the welcome screen turns UI sounds and haptics on or off. Sounds follow the ringer switch; haptics need iOS 18 or later.
 
 Exports are capped at about 16 megapixels, which is the canvas limit in iOS Safari. 12 MP iPhone photos save at full size; 24 or 48 MP photos are scaled down slightly. The saved file doesn't keep the original's date and location.
 
