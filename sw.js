@@ -1,6 +1,6 @@
 // Offline support: cache the app shell, serve it cache-first, refresh in the background.
 // Bump VERSION whenever you change any file so phones pick up the update.
-const VERSION = 'lumentap-v1';
+const VERSION = 'lumentap-v2';
 const FILES = [
   './',
   './index.html',
