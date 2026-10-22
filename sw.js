@@ -2,7 +2,7 @@
 // The page itself is network-first: when online you always get the latest version,
 // and the saved copy is only used when offline. Icons and the manifest are cache-first.
 // Bump VERSION whenever you change any file.
-const VERSION = 'lumentap-v5';
+const VERSION = 'lumentap-v6';
 const FILES = [
   './',
   './index.html',
